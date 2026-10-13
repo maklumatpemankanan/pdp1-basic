@@ -1,9 +1,9 @@
 # PDP-1 Tiny BASIC
 
-Ein ganzzahliger BASIC-Interpreter für den DEC PDP-1 mit 16K Kernspeicher
-(Speicherbänke 0–3), geschrieben in MACRO-1-Assembler, mit Punktgrafik auf dem
-Type-30-Bildschirm. Entwickelt und getestet auf dem PiDP-1 und im Emulator
-*blincolnlights*.
+An integer BASIC interpreter for the DEC PDP-1 with 16K of core memory
+(memory banks 0–3). It is written in MACRO-1 assembler and draws point graphics
+on the Type 30 display. Developed and tested on the PiDP-1 and in the
+*blincolnlights* emulator.
 
 ```
 PDP-1 TINY BASIC
@@ -20,228 +20,225 @@ PDP-1 TINY BASIC
 >
 ```
 
----
-
-## Inhalt
-
-1. [Überblick](#1-überblick)
-2. [Schnellstart](#2-schnellstart)
-3. [Sprachreferenz](#3-sprachreferenz)
-4. [Programme auf Lochstreifen](#4-programme-auf-lochstreifen)
-5. [Speicherbelegung](#5-speicherbelegung)
-6. [Aufbau des Interpreters](#6-aufbau-des-interpreters)
-7. [Dateien und Werkzeuge](#7-dateien-und-werkzeuge)
-8. [Entwicklungsgeschichte](#8-entwicklungsgeschichte)
-9. [Einschränkungen](#9-einschränkungen)
-10. [Ausblick](#10-ausblick)
+> The source files, comments and the example programs are in German, for
+> example `primzahlen.bas` (prime numbers) and `zahlenraten.bas` (number
+> guessing). Messages printed by the interpreter are in English.
 
 ---
 
-## 1. Überblick
+## Contents
 
-| Merkmal | Wert |
+1. [Overview](#1-overview)
+2. [Quick start](#2-quick-start)
+3. [Language reference](#3-language-reference)
+4. [Programs on paper tape](#4-programs-on-paper-tape)
+5. [Memory map](#5-memory-map)
+6. [Inside the interpreter](#6-inside-the-interpreter)
+7. [Files and tools](#7-files-and-tools)
+8. [Development history](#8-development-history)
+9. [Limitations](#9-limitations)
+10. [Outlook](#10-outlook)
+
+---
+
+## 1. Overview
+
+| Feature | Value |
 |---|---|
-| Zielsystem | PDP-1 mit Speichererweiterung, 16K Wörter zu 18 Bit (Bank 0–3) |
-| Zahlen | ganzzahlig, 18 Bit Einerkomplement, −131071 … +131071 |
-| Variablen | A–Z |
-| Programmspeicher | 6143 Wörter (Bank 2 und untere Hälfte von Bank 3) |
-| Grafik | Type 30, 1024 × 1024 Punkte, bis zu 1024 Punkte gleichzeitig |
-| Ein-/Ausgabe | Flexowriter (Schreibmaschine), Type-30-Bildschirm, Lochstreifenleser, Lochstreifenstanzer |
-| Optionen | Multiply/Divide-Option (EAE) wird beim Start erkannt und genutzt; ohne sie rechnet der Interpreter in Software |
-| Codegröße | Interpreter 0100–4027 in Bank 0, Daten 355 Wörter in Bank 1 |
-| Ladeband | `basic.tape`, 8410 Zeilen Lochstreifen, ca. 21 s Lesezeit |
+| Target system | PDP-1 with memory extension, 16K words of 18 bits (banks 0–3) |
+| Numbers | integers, 18-bit ones' complement, −131071 … +131071 |
+| Variables | A–Z |
+| Program memory | 6143 words (bank 2 and the lower half of bank 3) |
+| Graphics | Type 30, 1024 × 1024 points, up to 1024 points at a time |
+| Input/output | Flexowriter typewriter, Type 30 display, paper tape reader, paper tape punch |
+| Options | the multiply/divide option (EAE) is detected at startup and used if present; without it the interpreter multiplies and divides in software |
+| Code size | interpreter 0100–4027 in bank 0, 355 words of data in bank 1 |
+| Load tape | `basic.tape`, 8410 tape lines, about 21 s to read |
 
-Der Interpreter folgt dem Vorbild der Tiny-BASIC-Dialekte der 1970er Jahre:
-Zeilennummern, eine Anweisung pro Zeile, direkter Modus und Programmmodus.
-Programmzeilen werden beim Eingeben tokenisiert und können auf Lochstreifen
-gestanzt und wieder eingelesen werden. Mit `PLOT` zeichnen Programme Punkte
-auf den Type-30-Bildschirm; der Interpreter hält das Bild stehen, solange das
-Programm läuft.
+The interpreter follows the Tiny BASIC dialects of the 1970s: line numbers, one
+statement per line, direct mode and program mode. Program lines are tokenized
+as they are entered and can be punched to paper tape and read back. With
+`PLOT`, programs draw points on the Type 30 display, and the interpreter keeps
+the picture on screen while the program runs.
 
 ---
 
-## 2. Schnellstart
+## 2. Quick start
 
-### 2.1 Bauen
+### 2.1 Building
 
-Voraussetzungen: `macro1_1` (aus `pidp1/src/macro`) und Python 3.
+Requirements: `macro1_1` (from `pidp1/src/macro`) and Python 3.
 
 ```sh
-macro1_1 -d basic0.mac                              # Bank 0, Blockformat für READ-IN
-macro1_1 -r -d basic1.mac                           # Bank 1, RIM, bank-relativ
-python3 xtape.py --check basic0.lst 1:basic1.lst    # Adressen beider Teile abgleichen
+macro1_1 -d basic0.mac                              # bank 0, block format for READ-IN
+macro1_1 -r -d basic1.mac                           # bank 1, RIM, bank-relative
+python3 xtape.py --check basic0.lst 1:basic1.lst    # cross-check the addresses of both parts
 python3 xtape.py -o basic.tape basic0.rim 1:basic1.rim
 ```
 
-`macro1_1` nennt seine Ausgabe immer `.rim`, auch im Blockformat. Auf die
-Maschine kommt nur `basic.tape`.
+`macro1_1` always names its output `.rim`, even in block format. Only
+`basic.tape` goes onto the machine.
 
-### 2.2 Laden
+### 2.2 Loading
 
-1. Schalter **EXTEND aus**, Extension-Adressschalter auf **0**.
-2. `basic.tape` in den Lochstreifenleser legen.
-3. **READ-IN** drücken.
+1. Set the **EXTEND switch off** and the extension address switches to **0**.
+2. Put `basic.tape` into the paper tape reader.
+3. Press **READ-IN**.
 
-Nach etwa 21 Sekunden erscheint der Begrüßungstext auf der Schreibmaschine.
-Der Interpreter schaltet selbst in den Extend Mode.
+After about 21 seconds the banner appears on the typewriter. The interpreter
+switches into extend mode by itself.
 
-**Neustart** ohne neu zu laden: START bei Adresse **0100**. Programm und
-Variablen werden dabei gelöscht.
+**Restart** without reloading: START at address **0100**. This clears the
+program and the variables.
 
-### 2.3 Bedienung
+### 2.3 Operation
 
-| Eingabe | Wirkung |
+| Input | Effect |
 |---|---|
-| `10 PRINT "HALLO"` | Zeile 10 eintragen oder ersetzen |
-| `10` | Zeile 10 löschen |
-| `PRINT 2+3` | sofort ausführen (direkter Modus) |
-| Rückschritt | letztes Zeichen der Eingabezeile zurücknehmen |
-| Wagenrücklauf | Zeile abschließen |
-| beliebige Taste während RUN, LIST, SAVE, LOAD | Abbruch mit `BREAK` |
+| `10 PRINT "HELLO"` | enter or replace line 10 |
+| `10` | delete line 10 |
+| `PRINT 2+3` | execute immediately (direct mode) |
+| Backspace | take back the last character of the input line |
+| Carriage return | finish the line |
+| any key during RUN, LIST, SAVE, LOAD | abort with `BREAK` |
 
-Schlüsselwörter dürfen klein oder groß geschrieben werden. LIST zeigt sie
-einheitlich in Großbuchstaben, ebenso die Variablennamen. Leerzeichen
-außerhalb von Texten entfernt der Interpreter beim Eintippen; LIST setzt um
-die Schlüsselwörter wieder je ein Leerzeichen. Aus `20 print "x", a * b` wird
-also `20 PRINT "x",A×B`. Text in Anführungszeichen und alles hinter `REM`
-bleibt so, wie es getippt wurde.
+Keywords may be typed in lower or upper case. LIST shows them in upper case,
+and the variable names too. The interpreter removes spaces outside of strings
+as you type, and LIST puts one space back around each keyword. So
+`20 print "x", a * b` becomes `20 PRINT "x",A×B`. Text in quotes and everything
+after `REM` stays exactly as typed.
 
 ---
 
-## 3. Sprachreferenz
+## 3. Language reference
 
-### 3.1 Befehle
+### 3.1 Commands
 
-Befehle werden in der Regel direkt eingegeben, dürfen aber auch im Programm
-stehen.
+Commands are normally typed in direct mode, but they may also appear in a
+program.
 
-| Befehl | Beschreibung |
+| Command | Description |
 |---|---|
-| `RUN` | Variablen löschen, Programm ab der ersten Zeile ausführen |
-| `LIST` | ganzes Programm ausgeben |
-| `LIST n` | Programm ab Zeile *n* ausgeben |
-| `NEW` | Programm, Variablen und Bildschirm löschen |
-| `SAVE` | Programm auf den Lochstreifenstanzer ausgeben (Abschnitt 4) |
-| `LOAD` | Programm vom Lochstreifenleser einlesen (Abschnitt 4) |
+| `RUN` | clear the variables and run the program from the first line |
+| `LIST` | list the whole program |
+| `LIST n` | list the program from line *n* onwards |
+| `NEW` | clear the program, the variables and the display |
+| `SAVE` | punch the program to paper tape (section 4) |
+| `LOAD` | read a program from the paper tape reader (section 4) |
 
-### 3.2 Anweisungen
+### 3.2 Statements
 
-| Anweisung | Beschreibung |
+| Statement | Description |
 |---|---|
-| `[LET] v = ausdruck` | Wert zuweisen; `LET` darf entfallen |
-| `PRINT element, element, …` | ausgeben; *element* ist ein Ausdruck oder `"text"` |
-| `PRINT` | Leerzeile |
-| `INPUT v [, v …]` | Werte einlesen, Eingabeaufforderung `? ` |
-| `IF ausdruck THEN anweisung` | bedingt ausführen; `THEN` darf entfallen |
-| `IF ausdruck THEN zeile` | bedingt springen |
-| `GOTO ausdruck` | springen; im direkten Modus Programmstart ab dieser Zeile |
-| `GOSUB ausdruck` | Unterprogramm aufrufen |
-| `RETURN` | aus dem Unterprogramm zurückkehren |
-| `FOR v = a TO b [STEP c]` | Zählschleife, `STEP` auch negativ |
-| `NEXT [v]` | Schleifenende |
-| `PLOT x, y` | Punkt auf den Bildschirm setzen (Abschnitt 3.5) |
-| `CLS` | Bildschirm löschen |
-| `REM text` | Kommentar |
-| `END` | Programm beenden |
+| `[LET] v = expression` | assign a value; `LET` is optional |
+| `PRINT item, item, …` | print; an *item* is an expression or `"text"` |
+| `PRINT` | blank line |
+| `INPUT v [, v …]` | read values, prompt `? ` |
+| `IF expression THEN statement` | conditional statement; `THEN` is optional |
+| `IF expression THEN line` | conditional jump |
+| `GOTO expression` | jump; in direct mode, start the program at that line |
+| `GOSUB expression` | call a subroutine |
+| `RETURN` | return from the subroutine |
+| `FOR v = a TO b [STEP c]` | counting loop, `STEP` may be negative |
+| `NEXT [v]` | end of loop |
+| `PLOT x, y` | put a point on the display (section 3.5) |
+| `CLS` | clear the display |
+| `REM text` | comment |
+| `END` | end the program |
 
-Einzelheiten:
+Details:
 
-- **PRINT:** Ein Komma setzt einen Tabulator. Steht das Komma am Zeilenende,
-  entfällt der Zeilenvorschub.
-- **INPUT:** Jeder Wert ist ein vollständiger Ausdruck, zum Beispiel `A+1` oder
-  `RND(6)`. Mehrere Werte dürfen durch Komma getrennt in einer Zeile stehen.
-  Fehlende Werte werden mit einem neuen `? ` erfragt. Eine leere Eingabe (nur
-  RETURN) setzt 0.
-- **IF:** Jeder Wert ungleich 0 gilt als wahr. Ist die Bedingung falsch, geht es
-  mit der nächsten Zeile weiter.
-- **GOTO und GOSUB** akzeptieren berechnete Zeilennummern, etwa `GOTO 100+10*K`.
-- **FOR/NEXT:** Schleifen dürfen verschachtelt werden. Eine Schleife läuft
-  mindestens einmal. Bei positivem Schritt wird fortgesetzt, solange
-  *v* ≤ *b* ist, bei negativem Schritt, solange *v* ≥ *b* ist. Ein erneutes `FOR`
-  mit derselben Variablen ersetzt die alte Schleife; ein Sprung aus einer
-  Schleife heraus belegt daher keinen Speicher dauerhaft. FOR ist nur im
-  Programm erlaubt.
-- **GOSUB** darf rekursiv sein, bis zu 170 Ebenen.
+- **PRINT:** A comma moves to the next tab stop. A comma at the end of the
+  line suppresses the line feed.
+- **INPUT:** Each value is a full expression, for example `A+1` or `RND(6)`.
+  Several values may be typed on one line, separated by commas. Missing values
+  are asked for with a new `? `. An empty input (just RETURN) sets 0.
+- **IF:** Any value other than 0 counts as true. If the condition is false,
+  execution continues with the next line.
+- **GOTO and GOSUB** accept computed line numbers, such as `GOTO 100+10*K`.
+- **FOR/NEXT:** Loops may be nested. A loop always runs at least once. With a
+  positive step it continues while *v* ≤ *b*, with a negative step while
+  *v* ≥ *b*. A new `FOR` on the same variable replaces the old loop, so jumping
+  out of a loop does not use up memory permanently. FOR is only allowed in a
+  program.
+- **GOSUB** may be recursive, up to 170 levels deep.
 
-### 3.3 Ausdrücke
+### 3.3 Expressions
 
-Vorrang von oben nach unten:
+Precedence from highest to lowest:
 
-| Stufe | Operatoren |
+| Level | Operators |
 |---|---|
-| Klammern, Funktionen, Vorzeichen | `( )` `RND()` `ABS()` `-x` `+x` |
-| Multiplikation, Division | `×` (oder `*`, `x`, `X`) und `/` |
-| Addition, Subtraktion | `+` `-` |
-| Vergleich | `=` `<` `>` `<=` `>=` `<>` `#` |
+| parentheses, functions, sign | `( )` `RND()` `ABS()` `-x` `+x` |
+| multiplication, division | `×` (or `*`, `x`, `X`) and `/` |
+| addition, subtraction | `+` `-` |
+| comparison | `=` `<` `>` `<=` `>=` `<>` `#` |
 
-- **Vergleiche** liefern 1 (wahr) oder 0 (falsch) und sind nur einmal je
-  Ausdruck erlaubt.
-- **Division** schneidet zur Null hin ab: `7/2` = 3, `-7/2` = −3.
-- **Rest** einer Division: `A-A/B*B`.
-- **Überlauf** über ±131071 bricht mit `?OVERFLOW` ab.
+- **Comparisons** return 1 (true) or 0 (false). Only one comparison is allowed
+  per expression.
+- **Division** truncates toward zero: `7/2` = 3, `-7/2` = −3.
+- **Remainder** of a division: `A-A/B*B`.
+- **Overflow** beyond ±131071 stops with `?OVERFLOW`.
 
-### 3.4 Funktionen
+### 3.4 Functions
 
-| Funktion | Ergebnis |
+| Function | Result |
 |---|---|
-| `RND(n)` | Zufallszahl von 1 bis *n*; *n* ≥ 1 |
-| `ABS(x)` | Betrag von *x* |
+| `RND(n)` | random number from 1 to *n*; *n* ≥ 1 |
+| `ABS(x)` | absolute value of *x* |
 
-Der Zufallsgenerator ist der aus Spacewar!. Sein Startwert läuft weiter,
-solange der Interpreter auf eine Taste wartet, daher ist jeder Programmlauf
-anders.
+The random number generator is the one from Spacewar!. Its seed keeps running
+while the interpreter waits for a key, so every program run is different.
 
-### 3.5 Grafik
+### 3.5 Graphics
 
-`PLOT x, y` setzt einen Punkt auf den Type-30-Bildschirm. Die Koordinaten folgen
-dem eingebauten Koordinatensystem des Type 30:
+`PLOT x, y` puts a point on the Type 30 display. The coordinates follow the
+built-in coordinate system of the Type 30:
 
 | | |
 |---|---|
-| Bereich | −511 … +511 für x und y |
-| Ursprung | Bildmitte |
-| Richtung | x nach rechts, y nach oben |
-| Auflösung | 1023 × 1023 Punkte |
-| Punkte gleichzeitig | 1024 |
+| Range | −511 … +511 for x and y |
+| Origin | centre of the screen |
+| Direction | x to the right, y upwards |
+| Resolution | 1023 × 1023 points |
+| Points at a time | 1024 |
 
-- **Bild stehen lassen:** Der Type 30 hat keinen Bildspeicher, ein Punkt
-  verblasst nach etwa einer Viertelsekunde. Deshalb merkt sich der Interpreter
-  jeden Punkt in einer Anzeigeliste und zeichnet sie ständig nach, solange das
-  Programm läuft, auch während es druckt oder bei `INPUT` auf eine Eingabe
-  wartet.
-- **Verblassen:** Kehrt der Interpreter zur Eingabe `>` zurück, wird die
-  Anzeigeliste geleert, und das Bild verblasst wie auf einem echten Bildschirm.
-  Das geschieht am Programmende, bei `END`, nach einer Fehlermeldung, nach
-  `BREAK` und nach jedem direkt getippten Befehl. Ein direkt getipptes
-  `PLOT x, y` blitzt also einmal auf und verlöscht.
-- **Bild am Programmende zeigen:** Ein Programm, dessen Bild stehen bleiben
-  soll, wartet am Ende mit `INPUT`. Dabei zeichnet der Interpreter mit voller
-  Rate nach, und RETURN beendet das Programm:
+- **Keeping the picture:** The Type 30 has no picture memory, and a point fades
+  after about a quarter of a second. The interpreter therefore keeps every
+  point in a display list and redraws it continuously while the program runs,
+  including while it prints or waits for input at `INPUT`.
+- **Fading:** When the interpreter returns to the `>` prompt, the display list
+  is cleared and the picture fades as it would on a real screen. This happens
+  at the end of the program, at `END`, after an error message, after `BREAK`
+  and after every command typed in direct mode. A `PLOT x, y` typed directly
+  therefore flashes once and fades.
+- **Showing the picture at the end of a program:** A program whose picture
+  should stay on screen waits at the end with `INPUT`. The interpreter then
+  redraws at full rate, and RETURN ends the program:
 
   ```basic
-  900 PRINT "ENDE MIT RETURN"
+  900 PRINT "PRESS RETURN TO END"
   910 INPUT Z
   ```
 
-- **Löschen während des Laufs:** `CLS` löscht das Bild.
-- **Fehler:** Koordinaten außerhalb von ±511 ergeben `?ILLEGAL VALUE`, der
-  1025. Punkt ergibt `?DISPLAY FULL`.
-- **Wiederholrate:**
+- **Clearing while running:** `CLS` clears the picture.
+- **Errors:** Coordinates outside ±511 give `?ILLEGAL VALUE`, the 1025th point
+  gives `?DISPLAY FULL`.
+- **Refresh rate:**
 
-  | Situation | nachgezeichnete Punkte pro Sekunde (Emulator) |
+  | Situation | points redrawn per second (emulator) |
   |---|---|
-  | Warten auf `INPUT`, Druckausgabe | ca. 10 000 |
-  | während das Programm rechnet (32 Punkte pro Programmzeile) | ca. 4 000 |
+  | waiting at `INPUT`, printing | about 10,000 |
+  | while the program computes (32 points per program line) | about 4,000 |
 
-  Bei vielen Punkten flimmert das Bild deshalb während des Rechnens etwas und
-  steht ruhig, sobald das Programm bei `INPUT` wartet.
-- **Geschwindigkeit:** Programme ohne Grafik werden durch die Auffrischung
-  nicht langsamer. Bei Programmen mit vielen Punkten geht dagegen ein großer
-  Teil der Zeit ins Nachzeichnen: Bei der Lissajous-Figur mit 1001 Punkten
-  ist es knapp die Hälfte.
+  With many points the picture therefore flickers a little while the program
+  computes, and becomes steady once the program waits at `INPUT`.
+- **Speed:** Programs without graphics are not slowed down by the refresh.
+  Programs with many points spend a large part of their time redrawing: for
+  the Lissajous figure with 1001 points it is almost half.
 
-Beispiel, ein Kreis nach Minskys Kreisalgorithmus, der auf dem PDP-1
-entstanden ist:
+Example, a circle drawn with Minsky's circle algorithm, which originated on the
+PDP-1:
 
 ```basic
 10 CLS
@@ -255,225 +252,222 @@ entstanden ist:
 90 INPUT Z
 ```
 
-**Programme aus anderen BASICs anpassen.** Viele Grafikprogramme sind für
-Fließkomma-BASIC und Bildschirme mit 40 bis 320 Punkten Breite geschrieben.
-Hier wird ganzzahlig gerechnet, und `B/X` ergibt 0, solange B kleiner als X ist.
-Solche Programme werden deshalb hochskaliert:
+**Adapting programs from other BASICs.** Many graphics programs were written
+for floating-point BASICs and screens 40 to 320 points wide. Here the
+arithmetic is integer, and `B/X` is 0 as long as B is smaller than X. Such
+programs therefore need to be scaled up:
 
-- Alle Amplituden und Längen um einen Faktor wie 10 bis 20 vergrößern, dann
-  bleiben die Divisionen genau genug.
-- Den Ursprung in die Bildmitte legen, Verschiebungen wie `32+…` also
-  weglassen.
-- Auf Zwischenwerte achten: `X*X` überläuft schon bei X = 363.
-  `(X/2)*(X/2)/100` liefert dasselbe wie `X*X/400` ohne Überlauf.
+- Multiply all amplitudes and lengths by a factor such as 10 to 20, so the
+  divisions stay accurate enough.
+- Put the origin at the centre of the screen, i.e. drop offsets such as `32+…`.
+- Watch intermediate values: `X*X` already overflows at X = 363.
+  `(X/2)*(X/2)/100` gives the same as `X*X/400` without overflowing.
 
-`lissajous.bas` ist so ein angepasstes Programm. Im Original standen die
-Amplituden 15 und 6 und der Mittelpunkt (32, 22); das ergab hier nur ein
-30 Punkte großes Quadrat. Mal 20 und um 0, 0 zentriert entsteht die richtige
-Figur aus 1001 Punkten.
+`lissajous.bas` is such an adapted program. The original used amplitudes of 15
+and 6 and a centre at (32, 22), which here produced only a square 30 points
+across. Multiplied by 20 and centred on 0, 0, it gives the proper figure of
+1001 points.
 
-### 3.6 Zeichen auf dem Flexowriter
+### 3.6 Characters on the Flexowriter
 
-Der Flexowriter kennt keinen Stern, kein Semikolon und keinen Doppelpunkt.
+The Flexowriter has no asterisk, no semicolon and no colon.
 
-| gewünscht | tippen | Hinweis |
+| wanted | type | note |
 |---|---|---|
-| mal | `×` bzw. `*` am PC | `x` und `X` werden an dieser Stelle ebenfalls als „mal“ gelesen |
-| ungleich | `<>` | `#` geht auch, wird aber als `⊃` gedruckt |
-| Trennzeichen in PRINT | `,` | `;` gibt es nicht |
-| mehrere Anweisungen pro Zeile | — | nicht möglich |
+| multiply | `×`, or `*` on a PC | `x` and `X` are also read as "times" in this position |
+| not equal | `<>` | `#` also works, but prints as `⊃` |
+| separator in PRINT | `,` | there is no `;` |
+| several statements per line | — | not possible |
 
-Hinter einem Wert kann in einem Ausdruck nie ein Buchstabe stehen. Deshalb ist
-`DXD` eindeutig „D mal D“, und die Variable X bleibt trotzdem nutzbar.
+In an expression a letter can never follow a value directly. `DXD` therefore
+unambiguously means "D times D", and the variable X remains usable.
 
-### 3.7 Fehlermeldungen
+### 3.7 Error messages
 
-Im Programmlauf folgt die Zeilennummer, zum Beispiel `?DIVISION BY ZERO IN 60`.
+When a program is running, the line number follows, for example
+`?DIVISION BY ZERO IN 60`.
 
-| Meldung | Ursache |
+| Message | Cause |
 |---|---|
-| `?SYNTAX ERROR` | Anweisung nicht verständlich |
-| `?OVERFLOW` | Ergebnis oder Zahl außerhalb ±131071 |
-| `?DIVISION BY ZERO` | Division durch 0 |
-| `?UNDEFINED LINE` | GOTO/GOSUB auf eine nicht vorhandene Zeile |
-| `?RETURN WITHOUT GOSUB` | RETURN ohne offenes GOSUB |
-| `?NEXT WITHOUT FOR` | NEXT ohne passendes FOR |
-| `?ILLEGAL VALUE` | Zeilennummer 0, `RND(n)` mit *n* < 1, PLOT außerhalb ±511 |
-| `?ILLEGAL DIRECT` | FOR im direkten Modus |
-| `?OUT OF MEMORY` | Programmspeicher voll |
-| `?DISPLAY FULL` | mehr als 1024 Punkte auf dem Bildschirm |
-| `?STACK OVERFLOW` | zu tief verschachtelt (GOSUB, FOR oder Ausdruck) |
-| `BREAK` | Abbruch durch Tastendruck |
+| `?SYNTAX ERROR` | statement not understood |
+| `?OVERFLOW` | result or number outside ±131071 |
+| `?DIVISION BY ZERO` | division by 0 |
+| `?UNDEFINED LINE` | GOTO/GOSUB to a line that does not exist |
+| `?RETURN WITHOUT GOSUB` | RETURN without an open GOSUB |
+| `?NEXT WITHOUT FOR` | NEXT without a matching FOR |
+| `?ILLEGAL VALUE` | line number 0, `RND(n)` with *n* < 1, PLOT outside ±511 |
+| `?ILLEGAL DIRECT` | FOR in direct mode |
+| `?OUT OF MEMORY` | program memory full |
+| `?DISPLAY FULL` | more than 1024 points on the display |
+| `?STACK OVERFLOW` | nested too deeply (GOSUB, FOR or expression) |
+| `BREAK` | aborted by a key press |
 
 ---
 
-## 4. Programme auf Lochstreifen
+## 4. Programs on paper tape
 
 ### 4.1 SAVE
 
-`SAVE` stanzt das Programm als lesbaren Text in dieser Reihenfolge:
+`SAVE` punches the program as readable text, in this order:
 
-1. 40 Zeilen Leerband als Vorlauf
-2. Umschaltung auf Kleinschrift (072)
-3. das Programm, genau wie LIST es ausgibt
-4. Stoppcode (013)
-5. 40 Zeilen Leerband als Nachlauf
+1. 40 lines of blank tape as leader
+2. shift to lower case (072)
+3. the program, exactly as LIST prints it
+4. stop code (013)
+5. 40 lines of blank tape as trailer
 
-Ein Tastendruck bricht ab, danach schreibt der Interpreter wieder auf die
-Schreibmaschine.
+A key press aborts; output then goes back to the typewriter.
 
 ### 4.2 LOAD
 
-`LOAD` löscht Programm, Variablen und Bildschirm und liest dann Zeile für Zeile vom
-Leser. Jede Zeile wird eingetragen, als wäre sie getippt worden.
+`LOAD` clears the program, the variables and the display, then reads the tape
+line by line. Each line is entered as if it had been typed.
 
-- Am **Stoppcode** endet das Einlesen mit der Meldung `n LINES LOADED`.
-- **Zeilen ohne Nummer** und Leerzeilen werden übersprungen.
-- **Fehlt der Stoppcode,** beendet ein Tastendruck das Einlesen. Die bis dahin
-  gelesenen Zeilen bleiben erhalten.
-- `LOAD` darf getippt werden, **bevor** das Band eingelegt ist. Der Interpreter
-  wartet auf das Band.
-- **Fehler** beim Einlesen, etwa `?ILLEGAL VALUE` bei Zeile 0, beenden LOAD.
+- At the **stop code** reading ends with the message `n LINES LOADED`.
+- **Lines without a number** and blank lines are skipped.
+- **If the stop code is missing,** a key press ends reading. The lines read up
+  to that point are kept.
+- `LOAD` may be typed **before** the tape is in the reader. The interpreter
+  waits for the tape.
+- **Errors** while reading, such as `?ILLEGAL VALUE` for line 0, end LOAD.
 
-### 4.3 Bandformat
+### 4.3 Tape format
 
-Das Format entspricht den echten PDP-1-Textbändern. Zum Vergleich diente das
-Lisp-Band `lisp-defs.pt` der PiDP-1.
+The format is that of genuine PDP-1 text tapes. The PiDP-1's Lisp tape
+`lisp-defs.pt` served as reference.
 
-| Element | Lochung |
+| Element | Punching |
 |---|---|
-| Zeichen | 6-Bit-FIO-DEC-Code in Loch 1–6 |
-| Loch 8 | ungerade Parität über die sechs Datenlöcher |
-| Leerzeichen | 200 (Code 0 mit Paritätsloch) |
-| Leerband | 0, wird überlesen |
-| ausgestanzte Zeile | 377, wird überlesen |
-| Groß-/Kleinschrift | Umschaltcodes 074 / 072 |
-| Zeilenende | 077 (277 mit Parität) |
-| Bandende | Stoppcode 013 |
+| character | 6-bit FIO-DEC code in holes 1–6 |
+| hole 8 | odd parity over the six data holes |
+| space | 200 (code 0 with parity hole) |
+| blank tape | 0, skipped |
+| rubbed-out line | 377, skipped |
+| upper/lower case | shift codes 074 / 072 |
+| end of line | 077 (277 with parity) |
+| end of tape | stop code 013 |
 
-### 4.4 Austausch mit dem PC
+### 4.4 Exchange with a PC
 
-`bastape.py` wandelt in beide Richtungen um:
+`bastape.py` converts in both directions:
 
 ```sh
-python3 bastape.py zahlenraten.bas zahlenraten.tape    # Textdatei → Band
-python3 bastape.py -d gesichert.tape gesichert.bas     # Band → Textdatei
+python3 bastape.py zahlenraten.bas zahlenraten.tape    # text file → tape
+python3 bastape.py -d gesichert.tape gesichert.bas     # tape → text file
 ```
 
-- `*` wird zu `×` und beim Zurückwandeln wieder zu `*`.
-- Ein mit `SAVE` gestanztes Band ist Byte für Byte identisch mit dem, das
-  `bastape.py` aus derselben Datei erzeugt.
-- Die Werkzeuge `encode_fiodec` und `decode_fiodec` der PiDP-1 verwenden
-  dasselbe Format. Bei `encode_fiodec` die Frage nach dem Stoppcode mit `y`
-  beantworten.
+- `*` becomes `×` and turns back into `*` on the way back.
+- A tape punched with `SAVE` is byte-for-byte identical to the one
+  `bastape.py` produces from the same file.
+- The PiDP-1 tools `encode_fiodec` and `decode_fiodec` use the same format.
+  Answer `y` when `encode_fiodec` asks about the stop code.
 
 ---
 
-## 5. Speicherbelegung
+## 5. Memory map
 
-Der Interpreter läuft im **Extend Mode**:
+The interpreter runs in **extend mode**:
 
-- Direkte Adressen erreichen nur die Bank, in der der Code läuft, also Bank 0.
-- Daten in Bank 1–3 werden über Zeigerwörter mit voller 16-Bit-Adresse
-  angesprochen (`lac i zeiger`). Indirektion ist in diesem Modus einstufig.
+- Direct addresses only reach the bank the code is running in, i.e. bank 0.
+- Data in banks 1–3 is accessed through pointer words holding full 16-bit
+  addresses (`lac i pointer`). In this mode indirection is single-level.
 
-### 5.1 Übersicht
+### 5.1 Overview
 
-| Bank | Adressen | Inhalt | auf dem Band |
+| Bank | Addresses | Contents | on tape |
 |---|---|---|---|
-| 0 | 00000–07777 | Interpreter, Konstanten, Variablen, Lader | ja |
-| 1 | 10000–17777 | Tabellen, Meldungen, Puffer, Stapel | Tabellen und Meldungen |
-| 2 | 20000–27777 | Programmspeicher | nein |
-| 3 | 30000–33777 | Programmspeicher (Fortsetzung) | nein |
-| 3 | 34000–37777 | Anzeigeliste für PLOT | nein |
+| 0 | 00000–07777 | interpreter, constants, variables, loader | yes |
+| 1 | 10000–17777 | tables, messages, buffers, stacks | tables and messages |
+| 2 | 20000–27777 | program memory | no |
+| 3 | 30000–33777 | program memory (continued) | no |
+| 3 | 34000–37777 | display list for PLOT | no |
 
-### 5.2 Bank 0: Interpreter
+### 5.2 Bank 0: interpreter
 
-| Adressen | Inhalt |
+| Addresses | Contents |
 |---|---|
-| 0000–0003 | reserviert für den Sequence Break (unbenutzt) |
-| 0004–0077 | frei |
-| 0100–1647 | Start mit EAE-Erkennung, Hauptschleife, Sprungtabelle, Fehlerbehandlung, Zeileneditor, alle Anweisungen einschließlich LIST, PLOT, CLS, SAVE und LOAD |
-| 1650–2472 | Ausdrucksauswertung (`expr`, `aexpr`, `trm`, `factor`), Vergleich, Multiplikation, Division, Zufallszahlen |
-| 2473–3502 | Zahlen ein- und ausgeben, Zeileneingabe, Zeichenklassen, Tokenisierung (`crunch`, `gettok`, `prtok`, `kwfind`), Schreibmaschine und Stanzer (`inch`, `outch`, `rawch`, `punch`), Textausgabe, Bildauffrischung (`clsdl`, `dslice`) |
-| 3503–3634 | Konstanten und Zeiger auf Bank 1–3 |
-| 3635–4027 | Variablen des Interpreters |
-| 4030–7677 | **frei, 1960 Wörter** |
-| 7700–7737 | `xld`, Lader für Bank 1–3 (nur beim Einlesen gebraucht) |
-| 7740–7750 | frei |
-| 7751–7777 | Bootstrap-Lader von macro1_1, **nicht belegen** |
+| 0000–0003 | reserved for the sequence break (unused) |
+| 0004–0077 | free |
+| 0100–1647 | start-up with EAE detection, main loop, dispatch table, error handling, line editor, all statements including LIST, PLOT, CLS, SAVE and LOAD |
+| 1650–2472 | expression evaluation (`expr`, `aexpr`, `trm`, `factor`), comparison, multiplication, division, random numbers |
+| 2473–3502 | number input and output, line input, character classes, tokenization (`crunch`, `gettok`, `prtok`, `kwfind`), typewriter and punch (`inch`, `outch`, `rawch`, `punch`), text output, display refresh (`clsdl`, `dslice`) |
+| 3503–3634 | constants and pointers into banks 1–3 |
+| 3635–4027 | interpreter variables |
+| 4030–7677 | **free, 1960 words** |
+| 7700–7737 | `xld`, loader for banks 1–3 (needed only while reading in) |
+| 7740–7750 | free |
+| 7751–7777 | macro1_1 bootstrap loader, **do not use** |
 
-Die Grenzen der Abschnitte stammen aus dem Listing `basic0.lst` und
-verschieben sich bei jeder Codeänderung. `xtape.py --check` meldet das Ende
-des Codes (`endcod`) und warnt, wenn es `xld` erreicht.
+The section boundaries come from the listing `basic0.lst` and move with every
+code change. `xtape.py --check` reports the end of the code (`endcod`) and warns
+if it reaches `xld`.
 
-### 5.3 Bank 1: Daten
+### 5.3 Bank 1: data
 
-| Adressen | Inhalt | Größe | auf dem Band |
+| Addresses | Contents | Size | on tape |
 |---|---|---|---|
-| 10000–10031 | Variablen A–Z | 26 Wörter | nein (RUN/NEW löschen) |
-| 10100–10377 | Meldungen, je 16 Wörter | | ja |
-| 10400–10602 | Schlüsselworttabelle (23 Einträge), Platz bis 10777 | 131 Wörter | ja |
-| 11000–11177 | Eingabepuffer für Programmzeilen | 126 Zeichen | nein |
-| 11200–11377 | Eingabepuffer für INPUT | 126 Zeichen | nein |
-| 11400–11577 | weitere Meldungen | | ja |
-| 11600–11777 | Zeichenklassen für alle 128 Zeichen | 128 Wörter | ja |
-| 12000–12777 | GOSUB-Stapel, 3 Wörter pro Ebene | 170 Ebenen | nein |
-| 13000–13777 | FOR-Stapel, 5 Wörter pro Schleife | 102 Schleifen | nein |
-| 14000–17777 | Stapel der Ausdrucksauswertung | 2048 Wörter | nein |
+| 10000–10031 | variables A–Z | 26 words | no (cleared by RUN/NEW) |
+| 10100–10377 | messages, 16 words each | | yes |
+| 10400–10602 | keyword table (23 entries), room up to 10777 | 131 words | yes |
+| 11000–11177 | input buffer for program lines | 126 characters | no |
+| 11200–11377 | input buffer for INPUT | 126 characters | no |
+| 11400–11577 | further messages | | yes |
+| 11600–11777 | character classes for all 128 characters | 128 words | yes |
+| 12000–12777 | GOSUB stack, 3 words per level | 170 levels | no |
+| 13000–13777 | FOR stack, 5 words per loop | 102 loops | no |
+| 14000–17777 | expression evaluation stack | 2048 words | no |
 
-Die Bereiche, die nicht auf dem Band stehen, werden beim Start gelöscht oder
-erst zur Laufzeit beschrieben.
+The areas that are not on the tape are cleared at start-up or only written at
+run time.
 
-**Format der Schlüsselworttabelle:** Jeder Eintrag besteht aus den Buchstaben
-des Worts (ein FIO-DEC-Code pro Wort, ohne Fallbit), dann `777777` und dem
-Token. `777776` beendet die Tabelle.
+**Keyword table format:** Each entry consists of the letters of the word (one
+FIO-DEC code per word, without the case bit), then `777777` and the token.
+`777776` ends the table.
 
-**Zeichenklassen:** Der Index ist das 7-Bit-Zeichen.
+**Character classes:** indexed by the 7-bit character.
 
-| Wert | Klasse |
+| Value | Class |
 |---|---|
-| `100+n` | Buchstabe *n* (0 = A … 31 = Z) |
-| `200+n` | Ziffer *n* |
-| `400` | fallunabhängiges Zeichen (Leerzeichen, Tabulator, Rückschritt, Wagenrücklauf) |
-| `0` | sonstiges Zeichen |
+| `100+n` | letter *n* (0 = A … 31 = Z) |
+| `200+n` | digit *n* |
+| `400` | case-independent character (space, tab, backspace, carriage return) |
+| `0` | any other character |
 
-### 5.4 Bank 2–3: Programmspeicher und Anzeigeliste
+### 5.4 Banks 2–3: program memory and display list
 
-Die Programmzeilen liegen aufsteigend sortiert ab 20000 und dürfen bis 33777
-reichen. Jede Zeile ist ein
-Eintrag:
+Program lines are stored in ascending order from 20000 and may extend up to
+33777. Each line is one entry:
 
 ```
-+0   Zeilennummer
-+1   Länge des Eintrags in Wörtern (2 + Text einschließlich 077)
-+2   Text, ein Wort je Element:
-       Zeichen      0 … 177
-       Token        200 + Nummer
-       Zahl         400000 + Wert (Wert 0 … 131071)
++0   line number
++1   length of the entry in words (2 + text including 077)
++2   text, one word per element:
+       character    0 … 177
+       token        200 + number
+       number       400000 + value (value 0 … 131071)
      ...
-     077  Zeilenende
+     077  end of line
 ```
 
-Nach der letzten Zeile folgt ein Wort 0 als Endemarke. Der Zeiger `ptop` zeigt
-darauf, alles dahinter bis 33777 ist frei. Mit der Längenangabe springen GOTO,
-GOSUB und der Zeilenwechsel ohne Textsuche von Eintrag zu Eintrag.
+After the last line comes a word 0 as end marker. The pointer `ptop` points to
+it; everything after it up to 33777 is free. Thanks to the length word, GOTO,
+GOSUB and moving to the next line jump from entry to entry without searching
+the text.
 
-Beispiel: `20 PRINT I*12` belegt 7 Wörter, nämlich `24` (20 dezimal), `7`,
-`201` (PRINT), `171` (I), `173` (×), `400014` (Zahl 12) und `77`.
+Example: `20 PRINT I*12` takes 7 words: `24` (20 decimal), `7`, `201` (PRINT),
+`171` (I), `173` (×), `400014` (number 12) and `77`.
 
-Zahlen über 131071 bleiben als Ziffern stehen und melden zur Laufzeit
-`?OVERFLOW`.
+Numbers above 131071 stay as digits and report `?OVERFLOW` at run time.
 
-**Anzeigeliste (34000–37777):** Jeder Punkt belegt zwei Wörter, erst Y, dann
-X, beide schon um 8 Bit nach links verschoben. In diesem Format erwartet `dpy`
-die Koordinate in den oberen 10 Bits von AC und IO. Der Zeiger `dlend` zeigt
-auf den nächsten freien Platz, `dcur` auf den nächsten nachzuzeichnenden
-Punkt. 2048 Wörter ergeben 1024 Punkte.
+**Display list (34000–37777):** Each point takes two words, first Y, then X,
+both already shifted left by 8 bits. This is the form in which `dpy` expects
+the coordinate, in the upper 10 bits of AC and IO. The pointer `dlend` points
+to the next free slot, `dcur` to the next point to redraw. 2048 words hold
+1024 points.
 
 ### 5.5 Tokens
 
-| Token | Wort | Token | Wort | Token | Wort |
+| Token | Word | Token | Word | Token | Word |
 |---|---|---|---|---|---|
 | 1 | PRINT | 10 | NEXT | 17 | THEN |
 | 2 | LET | 11 | INPUT | 20 | TO |
@@ -485,177 +479,180 @@ Punkt. 2048 Wörter ergeben 1024 Punkte.
 | | | | | 26 | PLOT |
 | | | | | 27 | CLS |
 
-Alle Werte sind oktal. Im Speicher steht ein Token als 200 + Nummer.
+All values are octal. In memory a token is stored as 200 + number.
 
 ---
 
-## 6. Aufbau des Interpreters
+## 6. Inside the interpreter
 
-### 6.1 Ladevorgang in zwei Stufen
+### 6.1 Two-stage loading
 
-`macro1_1` erzeugt nur 12-Bit-Adressen und kann deshalb Bank 1–3 nicht direkt
-auf ein Band schreiben. Das Ladeband besteht daher aus zwei Teilen:
+`macro1_1` only produces 12-bit addresses and therefore cannot write banks 1–3
+directly onto a tape. The load tape consists of two parts:
 
-1. **Blockband für Bank 0**, von `macro1_1` erzeugt. READ-IN lädt den Bootstrap
-   nach 7751–7777. Der Bootstrap lädt den Interpreter und `xld`. Das letzte
-   Wort springt nach `xld` (7700).
-2. **X-Blöcke für Bank 1–3**, von `xtape.py` angehängt. `xld` schaltet mit
-   `eem` in den Extend Mode und liest die Blöcke:
+1. **Block tape for bank 0**, produced by `macro1_1`. READ-IN loads the
+   bootstrap into 7751–7777. The bootstrap loads the interpreter and `xld`. The
+   last word jumps to `xld` (7700).
+2. **X-blocks for banks 1–3**, appended by `xtape.py`. `xld` switches into
+   extend mode with `eem` and reads the blocks:
 
    ```
-   n  adresse16  daten[n]  prüfsumme      (XOR über n, Adresse und Daten)
+   n  address16  data[n]  checksum      (XOR over n, address and data)
    ```
 
-   Ein Wort `0` beendet das Band, danach springt `xld` zum Start bei 0100.
+   A word `0` ends the tape, after which `xld` jumps to the start at 0100.
 
-   Bei einem Prüfsummenfehler hält die Maschine bei 7733 an. CONTINUE liest den
-   nächsten Block.
+   On a checksum error the machine halts at 7733. CONTINUE reads the next
+   block.
 
-Die Quellen für Bank 1 werden bank-relativ übersetzt (0000–7777). `xtape.py`
-verschiebt sie beim Anhängen um 10000. Bank 0 kennt die Bank-1-Adressen über
-Gleichungen wie `kwtab=10400`. `xtape.py --check` vergleicht diese mit dem
-Listing von `basic1`.
+The sources for bank 1 are assembled bank-relative (0000–7777). `xtape.py`
+relocates them by 10000 when appending. Bank 0 knows the bank-1 addresses
+through equates such as `kwtab=10400`. `xtape.py --check` compares these with
+the `basic1` listing.
 
-### 6.2 Aufrufkonventionen
+### 6.2 Calling conventions
 
-| Art | Aufruf | Ablauf |
+| Kind | Call | Mechanism |
 |---|---|---|
-| ohne Argument | `jsp sub` | `sub, dap ret` legt den Rücksprung in den Ausgang |
-| mit Argument | `jda sub` | Argument im AC; `jda` speichert es in `sub` und springt nach `sub+1` |
-| rekursiv | `jsp expr` | Rücksprung mit dem Makro `pushm` auf den Software-Stapel, Ausgang über `rexit` mit `popm` und `jmp i` |
+| no argument | `jsp sub` | `sub, dap ret` stores the return address in the exit |
+| with argument | `jda sub` | argument in AC; `jda` stores it in `sub` and jumps to `sub+1` |
+| recursive | `jsp expr` | return address pushed onto the software stack with the `pushm` macro, exit through `rexit` with `popm` and `jmp i` |
 
-Das Ergebnis steht immer im AC. Der PDP-1 hat weder Stapel noch
-Indexregister. `pushm` (`dac i sp`, `idx sp`) und `popm` (`law i 1`,
-`add sp`, `dac sp`, `lac i sp`) sind Makros, also direkt in den Code
-eingesetzt statt aufgerufen. Den Stapelüberlauf prüft nur `factor`, durch das
-jede tiefere Verschachtelung läuft. Nur die vier Routinen der Ausdrucksauswertung (`expr`, `aexpr`,
-`trm`, `factor`) sind reentrant, alle anderen Unterprogramme nicht. Diese vier
-legen auch linke Operanden und Operatoren auf den Stapel. Im Extend Mode
-enthält die von `jsp`/`jda` gelieferte Rücksprungadresse die Bankbits, und
-`jmp i` springt mit voller 16-Bit-Adresse zurück.
+The result is always in AC. The PDP-1 has neither a stack nor index registers.
+`pushm` (`dac i sp`, `idx sp`) and `popm` (`law i 1`, `add sp`, `dac sp`,
+`lac i sp`) are macros, so they are expanded inline instead of being called.
+Stack overflow is checked only in `factor`, which every deeper nesting passes
+through. Only the four expression routines (`expr`, `aexpr`, `trm`, `factor`)
+are reentrant; all other subroutines are not. These four also push left
+operands and operators onto the stack. In extend mode the return address
+delivered by `jsp`/`jda` includes the bank bits, and `jmp i` returns with a
+full 16-bit address.
 
-### 6.3 Tokenisierung
+### 6.3 Tokenization
 
-1. Nach jeder Eingabe bearbeitet `crunch` die Zeile im Puffer selbst. Das
-   Ergebnis ist nie länger als die Eingabe.
-   - Schlüsselwörter werden zu Tokens.
-   - Zahlen werden in ein Zahlwort umgerechnet (400000 + Wert). Das gesetzte
-     Vorzeichenbit unterscheidet es von allen Zeichen und Tokens.
-   - Leerzeichen und Tabulatoren entfallen.
-   - Kleinbuchstaben werden zu Großbuchstaben.
-2. Texte in Anführungszeichen und alles hinter REM bleiben unverändert.
-3. Beim Ausführen erkennt der Interpreter ein Token oder eine Zahl mit einem
-   einzigen Vergleich. Eine Zahl muss nicht mehr umgerechnet werden, und
-   Leerzeichen müssen nicht mehr übersprungen werden.
-4. LIST schreibt Tokens mit `prtok` und Zahlen mit `prnum` wieder aus und
-   setzt die Leerzeichen um die Schlüsselwörter.
+1. After every input, `crunch` processes the line in place in the buffer. The
+   result is never longer than the input.
+   - Keywords become tokens.
+   - Numbers are converted into a number word (400000 + value). The set sign
+     bit distinguishes it from all characters and tokens.
+   - Spaces and tabs are dropped.
+   - Lower-case letters become upper case.
+2. Text in quotes and everything after REM remain unchanged.
+3. At run time the interpreter recognises a token or a number with a single
+   test. Numbers no longer need converting, and spaces no longer need skipping.
+4. LIST writes tokens out with `prtok` and numbers with `prnum`, and puts the
+   spaces back around keywords.
 
-### 6.4 Geschwindigkeit
+### 6.4 Speed
 
-Gemessen im Emulator, Primzahlprogramm bis 200 ohne Druckausgabe und
-`lissajous.bas` bis zur Eingabeaufforderung:
+Measured in the emulator: the prime number program up to 200 without printing,
+and `lissajous.bas` up to its input prompt.
 
-| Stand | Primzahlen | Lissajous |
+| Version | Primes | Lissajous |
 |---|---|---|
-| Text bei jeder Ausführung neu durchsucht (Schritt 2/3) | 74,5 s | – |
-| Schlüsselwörter tokenisiert, Zeilenlänge (Schritt 4) | 15,8 s | – |
-| mit Grafik (Schritt 6) | 16,0 s | 52,0 s |
-| Zahlen und Leerzeichen beim Eintippen, Stapel als Makros, ohne EAE (Schritt 7) | 10,1 s | 43,6 s |
-| dasselbe mit EAE | **8,9 s** | **40,1 s** |
+| text rescanned on every execution (steps 2/3) | 74.5 s | – |
+| keywords tokenized, line length (step 4) | 15.8 s | – |
+| with graphics (step 6) | 16.0 s | 52.0 s |
+| numbers and spaces handled at entry, stack as macros, without EAE (step 7) | 10.1 s | 43.6 s |
+| the same with EAE | **8.9 s** | **40.1 s** |
 
-Wo die Zeit hingeht, zeigten Stichproben des Befehlszählers über den
-Debug-Dienst:
+Samples of the program counter, taken through the debug service, showed where
+the time goes:
 
-- **Vor Schritt 7:** gut ein Drittel der Zeit für `push`/`pop`/`rexit` und
-  knapp ein Fünftel in `skpsp`.
-- **Bei der Lissajous-Figur nach Schritt 7:** knapp die Hälfte im
-  Nachzeichnen der Anzeigeliste (`dslice`).
+- **Before step 7:** a good third of the time in `push`/`pop`/`rexit` and
+  almost a fifth in `skpsp`.
+- **For the Lissajous figure after step 7:** almost half in redrawing the
+  display list (`dslice`).
 
-Ein BASIC-Befehl kostet trotzdem einige hundert Maschinenbefehle. Gegenüber
-Assembler bleibt ein Faktor in der Größenordnung von 100.
+A BASIC statement still costs a few hundred machine instructions. Compared with
+assembler, a factor of the order of 100 remains.
 
-### 6.5 Arithmetik
+### 6.5 Arithmetic
 
-- **Einerkomplement:** Es gibt +0 (`000000`) und −0 (`777777`). Nach jedem
-  `cma` folgt `sad m0 / cla`, damit Vergleiche und `sza` stimmen.
-- **Überlauf** erkennt das Overflow-Flag, das `szo` abfragt und dabei löscht.
-- **EAE-Erkennung:** Beim Start rechnet der Interpreter `3 × 5 / 5` mit
-  `mul` und `div`. Ergibt das 3 und überspringt `div` wie vorgesehen den
-  Folgebefehl, ist die Multiply/Divide-Option vorhanden (`eae` = 1). Ohne
-  Option sind dieselben Befehlscodes die Schrittbefehle `mus`/`dis`, die auf
-  jedem PDP-1 harmlos sind; der Test schlägt dann fehl.
-- **Multiplikation mit EAE:** `mul`, danach `scr 1s`. Das Produkt steht dann
-  als Doppelwort in AC:IO und passt, wenn AC = 0 und IO positiv ist.
-- **Division mit EAE:** Dividend als Doppelwort `0 : Wert` mit `scl 1s` in die
-  EAE-Lage bringen, dann `div`. Der Quotient steht im AC, der Rest im IO
-  (verwendet für `RND`).
-- **Ohne EAE:** Multiplikation durch Schieben und Addieren. Division:
-  den Divisor verdoppeln, bis er nicht mehr in den Dividenden passt, dann
-  stellenweise subtrahieren.
-- **Vorzeichen** behandelt der Interpreter in beiden Fällen getrennt und
-  rechnet mit den Beträgen.
-- **Vergleich:** Bei verschiedenen Vorzeichen entscheidet das Vorzeichen,
-  sonst die Differenz. So kann der Vergleich nicht überlaufen.
-- **Dezimalausgabe:** Wiederholtes Abziehen der Zehnerpotenzen 100000 bis 1.
+- **Ones' complement:** There is +0 (`000000`) and −0 (`777777`). Every `cma`
+  is followed by `sad m0 / cla` so that comparisons and `sza` work.
+- **Overflow** is detected with the overflow flag, which `szo` tests and
+  clears.
+- **EAE detection:** At start-up the interpreter computes `3 × 5 / 5` with
+  `mul` and `div`. If the result is 3 and `div` skips the following instruction
+  as it should, the multiply/divide option is present (`eae` = 1). Without the
+  option the same opcodes are the step instructions `mus`/`dis`, which are
+  harmless on every PDP-1; the test then fails.
+- **Multiplication with EAE:** `mul`, then `scr 1s`. The product is then a
+  double word in AC:IO and fits if AC = 0 and IO is positive.
+- **Division with EAE:** move the dividend, as the double word `0 : value`, into
+  the EAE position with `scl 1s`, then `div`. The quotient is in AC and the
+  remainder in IO (used for `RND`).
+- **Without EAE:** multiplication by shifting and adding. Division: double the
+  divisor until it no longer fits into the dividend, then subtract place by
+  place.
+- **Signs** are handled separately in both cases; the interpreter computes with
+  absolute values.
+- **Comparison:** with different signs the sign decides, otherwise the
+  difference. This way the comparison cannot overflow.
+- **Decimal output:** repeated subtraction of the powers of ten from 100000
+  down to 1.
 
-### 6.6 Grafik und Bildauffrischung
+### 6.6 Graphics and display refresh
 
-- **Zeichnen:** `PLOT` prüft beide Koordinaten (`pchk`), verschiebt sie mit
-  `sal 8s` in die oberen 10 Bits und hängt sie an die Anzeigeliste an. Danach
-  zeichnet es den Punkt sofort einmal. `sal` füllt mit dem Vorzeichen auf und
-  passt damit zum Einerkomplement des Type 30.
-- **Nachzeichnen:** `dslice` zeichnet bei jedem Aufruf bis zu 16 Punkte ab
-  `dcur` und fängt am Ende der Liste wieder vorne an. Bei leerer Liste kehrt es
-  sofort zurück. Aufgerufen wird es an drei Stellen:
+- **Plotting:** `PLOT` checks both coordinates (`pchk`), shifts them into the
+  upper 10 bits with `sal 8s` and appends them to the display list. It then
+  draws the point once immediately. `sal` fills with the sign bit, which matches
+  the Type 30's ones' complement coordinates.
+- **Redrawing:** Each call of `dslice` draws up to 16 points starting at `dcur`
+  and wraps around at the end of the list. With an empty list it returns
+  immediately. It is called from three places:
 
-  | Aufrufer | Gelegenheit |
+  | Caller | Occasion |
   |---|---|
-  | `inch` | in der Warteschleife auf einen Tastendruck |
-  | `rawch` | während eines Anschlags: `tyo` ohne Warten, dann Auffrischen, bis `cks` die Schreibmaschine wieder als bereit meldet |
-  | `runat` | am Anfang jeder Programmzeile, zweimal (32 Punkte) |
+  | `inch` | in the loop waiting for a key press |
+  | `rawch` | during a keystroke: `tyo` without waiting, then refresh until `cks` reports the typewriter ready again |
+  | `runat` | at the start of every program line, twice (32 points) |
 
-- **Verblassen:** `loop`, die Rückkehr zur Eingabe, leert die Anzeigeliste
-  mit `clsdl`. Ohne Nachzeichnen verlöschen die Punkte nach etwa einer
-  Viertelsekunde von selbst.
-- **Punktausgabe:** `dpy` ohne Warten (`720307`) mit Helligkeit 3, der
-  hellsten Stufe. Die Schleife braucht pro Punkt etwa 95 µs und damit länger
-  als die 50 µs, die der Type 30 für einen Punkt benötigt.
+- **Fading:** `loop`, the return to the prompt, clears the display list with
+  `clsdl`. Without redrawing, the points fade by themselves after about a
+  quarter of a second.
+- **Point output:** `dpy` without waiting (`720307`) at intensity 3, the
+  brightest level. The loop takes about 95 µs per point, longer than the 50 µs
+  the Type 30 needs for one point.
 
-### 6.7 Schreibmaschine und Zeichensatz
+### 6.7 Typewriter and character set
 
-- **Gemeinsamer Umschaltzustand:** Der Flexowriter hat einen einzigen
-  Umschaltzustand für Tippen und Drucken. Die Variable `tcase` verfolgt ihn.
-  Sie wird von `inch` (Eingabe), `rawch` (Ausgabe) und `brk` (verworfene Taste
-  bei BREAK) nachgeführt.
-- **Zeichenformat:** Intern ist jedes Zeichen 7 Bit groß: Fallbit 100 plus
-  FIO-DEC-Code. Leerzeichen, Tabulator, Rückschritt und Wagenrücklauf stehen
-  ohne Fallbit.
-- **Ausgabeziel:** Bei SAVE leitet `rawch` die Ausgabe auf `punch` um, mit
-  eigenem Umschaltzustand. `unpm` stellt danach die Schreibmaschine wieder her,
-  auch im Fehlerfall.
-- **Leser:** LOAD liest mit `rpa` ohne Warten und fragt den Status mit `cks`
-  ab, so dass ein Tastendruck jederzeit abbrechen kann. Ein liegengebliebenes
-  Zeichen wird verworfen. Kommt etwa 0,1 s lang nichts, stößt `rdch` den Leser
-  neu an. So bleibt LOAD auch nach einem Abbruch nicht hängen.
+- **Shared shift state:** The Flexowriter has a single shift state for typing
+  and printing. The variable `tcase` tracks it. It is kept up to date by
+  `inch` (input), `rawch` (output) and `brk` (the key discarded on BREAK).
+- **Character format:** Internally each character is 7 bits: case bit 100 plus
+  the FIO-DEC code. Space, tab, backspace and carriage return have no case bit.
+- **Output target:** During SAVE, `rawch` redirects output to `punch`, with its
+  own shift state. `unpm` switches back to the typewriter afterwards, also when
+  an error occurs.
+- **Reader:** LOAD reads with `rpa` without waiting and polls the status with
+  `cks`, so that a key press can abort at any time. A leftover character is
+  discarded. If nothing arrives for about 0.1 s, `rdch` restarts the reader.
+  This keeps LOAD from hanging after an abort.
 
 ---
 
-## 7. Dateien und Werkzeuge
+## 7. Files and tools
 
-| Datei | Inhalt |
+| File | Contents |
 |---|---|
-| `basic0.mac` | Interpreter und Lader, Bank 0 (MACRO-1, ca. 2300 Zeilen) |
-| `basic1.mac` | Meldungen, Schlüsselwörter, Zeichenklassen, Bank 1 |
-| `xtape.py` | setzt das Ladeband zusammen, prüft Adressen (`--check`) |
-| `bastape.py` | BASIC-Programme zwischen Textdatei und Lochstreifen umwandeln |
-| `basic.tape` | fertiges Ladeband des Interpreters |
-| `primzahlen.bas` / `.tape` | Beispiel: Primzahlen bis 200, zehn pro Zeile |
-| `zahlenraten.bas` / `.tape` | Beispiel: Zahlenraten mit `RND` und `INPUT` |
-| `kreis.bas` / `.tape` | Beispiel: Kreis nach Minsky auf dem Type 30 |
-| `parabel.bas` / `.tape` | Beispiel: Funktionsgraph mit Achsen auf dem Type 30 |
-| `lissajous.bas` / `.tape` | Beispiel: Lissajous-Figur aus zwei gekoppelten Schwingungen |
+| `basic0.mac` | interpreter and loader, bank 0 (MACRO-1, about 2300 lines) |
+| `basic1.mac` | messages, keywords, character classes, bank 1 |
+| `xtape.py` | assembles the load tape, checks addresses (`--check`) |
+| `bastape.py` | converts BASIC programs between text files and paper tape |
+| `basic.tape` | ready-made load tape of the interpreter |
+| `primzahlen.bas` / `.tape` | example: prime numbers up to 200, ten per line |
+| `zahlenraten.bas` / `.tape` | example: number guessing with `RND` and `INPUT` |
+| `kreis.bas` / `.tape` | example: Minsky circle on the Type 30 |
+| `parabel.bas` / `.tape` | example: function graph with axes on the Type 30 |
+| `lissajous.bas` / `.tape` | example: Lissajous figure from two coupled oscillations |
 
-### Beispielprogramm Zahlenraten
+### Example program: number guessing
+
+`zahlenraten.bas` as it is on tape, with German texts. In English: "I am
+thinking of a number from 1 to 100", "too small", "too big", "correct after …
+tries".
 
 ```basic
 10 REM ZAHLENRATEN
@@ -671,125 +668,122 @@ Assembler bleibt ein Faktor in der Größenordnung von 100.
 110 END
 ```
 
-### Testumgebung
+### Test environment
 
-Entwickelt wurde mit dem Emulator `pdp1` aus *blincolnlights*, gestartet
-mit `-t`. Er läuft ohne Bildschirm und ohne Panel, mit Schreibmaschine auf
-Port 1041 und Debug-Dienst auf Port 1040. Über den Debug-Dienst werden Bänder
-eingelegt (`r datei`, `p datei`), READ-IN ausgelöst und Breakpoints auf
-Labels aus dem Listing gesetzt. Jeder Entwicklungsschritt wurde dort mit
-geladenem Band und echten Tastatureingaben geprüft.
+Development used the `pdp1` emulator from *blincolnlights*, started with `-t`.
+It runs without display window and panel, with the typewriter on port 1041 and
+the debug service on port 1040. Through the debug service, tapes are mounted
+(`r file`, `p file`), READ-IN is triggered and breakpoints are set on labels
+from the listing. Every development step was checked there with the tape
+loaded and real keyboard input.
 
 ---
 
-## 8. Entwicklungsgeschichte
+## 8. Development history
 
-### Schritt 1: Gerüst und Lader
+### Step 1: Skeleton and loader
 
-- Speicheraufteilung über die vier Bänke festgelegt.
-- Zweistufiges Laden mit `xld` und `xtape.py`; der Bootstrap bei 7751–7777
-  bleibt unangetastet.
-- Zeileneingabe mit Rückschritt, Zahlenein- und -ausgabe, `PRINT`, `REM`,
-  `NEW`, `END`.
-- Software-Stapel als Vorbereitung für die Rekursion.
+- Memory layout across the four banks.
+- Two-stage loading with `xld` and `xtape.py`; the bootstrap at 7751–7777 stays
+  untouched.
+- Line input with backspace, number input and output, `PRINT`, `REM`, `NEW`,
+  `END`.
+- Software stack in preparation for recursion.
 
-### Schritt 2: Die Sprache
+### Step 2: The language
 
-- Rekursiver Ausdrucksparser mit Vorrang, Vergleichen, `RND` und `ABS`.
-- Multiplikation und Division in Software.
-- Programmspeicher mit Einfügen, Ersetzen und Löschen von Zeilen.
+- Recursive expression parser with precedence, comparisons, `RND` and `ABS`.
+- Multiplication and division in software.
+- Program memory with inserting, replacing and deleting lines.
 - `LIST`, `RUN`, `GOTO`, `IF/THEN`, `GOSUB/RETURN`, `FOR/NEXT`, `INPUT`, `LET`.
-- Abbruch per Tastendruck.
-- Erste lauffähige Programme: Primzahlen und Zahlenraten.
+- Abort by key press.
+- First working programs: prime numbers and number guessing.
 
-### Schritt 3: Anpassungen nach dem ersten Einsatz auf dem PiDP-1
+### Step 3: Adjustments after first use on the PiDP-1
 
-- **Malzeichen:** Die Schreibmaschinen-Anbindung des Anwenders lieferte für
-  `*` ein `x`. `x` und `X` gelten seitdem an Operatorstelle als „mal“.
-- **Fehlermeldungen:** Die knappen Meldungen `WHAT?`, `HOW?` und `SORRY`
-  wurden durch zehn eindeutige Meldungen ersetzt.
+- **Multiply sign:** The user's typewriter connection sent an `x` for `*`.
+  Since then `x` and `X` count as "times" in operator position.
+- **Error messages:** The terse messages `WHAT?`, `HOW?` and `SORRY` were
+  replaced by ten specific messages.
 
-### Schritt 4: Tokenisierung, SAVE und LOAD
+### Step 4: Tokenization, SAVE and LOAD
 
-- Schlüsselwörter werden beim Eingeben zu Tokens.
-- Jede Programmzeile speichert ihre Länge.
-- Das Primzahlprogramm wurde dadurch etwa 4,7-mal so schnell.
-- SAVE und LOAD im echten FIO-DEC-Bandformat.
-- `bastape.py` für den Austausch mit dem PC.
+- Keywords become tokens on entry.
+- Every program line stores its length.
+- This made the prime number program about 4.7 times faster.
+- SAVE and LOAD in genuine FIO-DEC tape format.
+- `bastape.py` for exchanging programs with a PC.
 
-### Schritt 5: Grafik auf dem Type 30
+### Step 5: Graphics on the Type 30
 
-- `PLOT x, y` und `CLS`.
-- Anzeigeliste für 1024 Punkte in Bank 3; der Programmspeicher wurde dafür auf
-  6143 Wörter verkleinert.
-- Ständige Bildauffrischung beim Warten, beim Drucken und während des
-  Programmlaufs.
-- Die Zeichenklassen-Tabelle zog nach 11600 um, weil die gewachsene
-  Schlüsselworttabelle sonst in sie hineingeragt hätte. `xtape.py` hatte die
-  Doppelbelegung beim Bandbau gemeldet.
-- Geprüft wurde mit Aufnahmen des Bildschirm-Datenstroms (Port 3400): Lage
-  der Punkte, Vollständigkeit des Bildes während LIST und während einer
-  Rechnung, `CLS`, `NEW`, `?DISPLAY FULL`.
+- `PLOT x, y` and `CLS`.
+- Display list for 1024 points in bank 3; program memory was reduced to 6143
+  words to make room.
+- Continuous display refresh while waiting, printing and running.
+- The character class table moved to 11600 because the grown keyword table
+  would otherwise have run into it. `xtape.py` had reported the overlap while
+  building the tape.
+- Verified with captures of the display data stream (port 3400): position of
+  the points, completeness of the picture during LIST and during computation,
+  `CLS`, `NEW`, `?DISPLAY FULL`.
 
-### Schritt 6: Grafik nach dem ersten Einsatz
+### Step 6: Graphics after first use
 
-Die erste Fassung ließ jedes Bild stehen, bis `CLS` oder `NEW` kam. Auch
-direkt getippte Punkte blieben, und ein zweiter Lauf eines Programms mit
-vielen Punkten endete mit `?DISPLAY FULL`. Das entsprach weder dem Verhalten
-eines Type 30 noch der Erwartung beim Testen.
+The first version kept every picture until `CLS` or `NEW`. Points typed in
+direct mode stayed as well, and a second run of a program with many points
+ended with `?DISPLAY FULL`. That matched neither the behaviour of a Type 30 nor
+what the user expected when testing.
 
-- Die Anzeigeliste gilt jetzt nur noch während des Programmlaufs. Bei der
-  Rückkehr zur Eingabe verblasst das Bild.
-- `INPUT` akzeptiert eine leere Eingabe (0). Damit kann ein Programm sein Bild
-  bis zu einem RETURN stehen lassen.
-- Pro Programmzeile werden 32 statt 16 Punkte nachgezeichnet.
-- Das Lissajous-Testprogramm wurde für Ganzzahl-Arithmetik hochskaliert.
+- The display list now only lives while a program runs. On return to the
+  prompt the picture fades.
+- `INPUT` accepts an empty input (0). A program can thus keep its picture on
+  screen until RETURN is pressed.
+- 32 instead of 16 points are redrawn per program line.
+- The Lissajous test program was scaled up for integer arithmetic.
 
-### Schritt 7: Geschwindigkeit
+### Step 7: Speed
 
-- Zahlen werden beim Eintippen in Binärwerte umgerechnet.
-- Die Multiply/Divide-Option wird erkannt und genutzt.
-- Ein Profil der Befehlszähler-Stichproben zeigte danach die eigentlichen
-  Bremsen: die Stapelverwaltung und das Überspringen von Leerzeichen. Deshalb
-  wurden `push`/`pop` zu Makros, und Leerzeichen entfallen schon beim
-  Eintippen.
-- Ergebnis: Das Primzahlprogramm läuft in 8,9 statt 16,0 s.
-- Nebenwirkung: LIST zeigt die Leerzeichen normiert.
+- Numbers are converted to binary values on entry.
+- The multiply/divide option is detected and used.
+- A profile from program counter samples then showed the real bottlenecks:
+  stack handling and skipping spaces. So `push`/`pop` became macros, and spaces
+  are dropped on entry.
+- Result: the prime number program runs in 8.9 instead of 16.0 s.
+- Side effect: LIST shows normalised spacing.
 
-### Gefundene und behobene Fehler
+### Bugs found and fixed
 
-| Fehler | Ursache | Behebung |
+| Bug | Cause | Fix |
 |---|---|---|
-| `BREAK` griff nicht bei `20 GOTO 20` | Abfrage nur beim Zeilenwechsel, nicht nach Sprüngen | Abfrage in `runat`, das jede Zeile durchläuft |
-| nach BREAK `/` statt `?` und `8` statt `>` | verworfene Taste war ein Umschaltcode, `tcase` stimmte nicht mehr | `brk` wertet Umschaltcodes aus |
-| LOAD hing nach einem abgebrochenen LOAD | offener Lesevorgang; ein weiteres `rpa` schaltet die Leserkupplung wieder ab | altes Zeichen verwerfen, Leser nach Zeitablauf neu anstoßen |
-| Fehlermeldung direkt hinter Ausgabe | kein Zeilenwechsel vor der Meldung | Spaltenmerker `col`, Meldung beginnt immer auf neuer Zeile |
+| `BREAK` did not work on `20 GOTO 20` | only checked when moving to the next line, not after jumps | check in `runat`, which every line passes through |
+| after BREAK, `/` instead of `?` and `8` instead of `>` | the discarded key was a shift code, `tcase` was out of step | `brk` evaluates shift codes |
+| LOAD hung after an aborted LOAD | read still pending; another `rpa` switches the reader clutch off again | discard the stale character, restart the reader after a timeout |
+| error message right after output on the same line | no line feed before the message | column flag `col`; messages always start on a new line |
 
 ---
 
-## 9. Einschränkungen
+## 9. Limitations
 
-- Nur ganze Zahlen von −131071 bis +131071, keine Fließkommazahlen.
-- Variablen sind einzelne Buchstaben, es gibt keine Felder und keine
-  Zeichenkettenvariablen.
-- Eine Anweisung pro Zeile.
-- Höchstens ein Vergleich pro Ausdruck, keine logischen Operatoren AND/OR.
-- Eingabezeilen haben höchstens 126 Zeichen.
-- Schlüsselwörter werden auch ohne Leerzeichen erkannt. `GO TO` mit
-  Leerzeichen ist deshalb nicht erlaubt, und eine Buchstabenfolge, die ein
-  Schlüsselwort ergibt, wird zu diesem Schlüsselwort.
-- Leerzeichen außerhalb von Texten werden nicht gespeichert. LIST zeigt das
-  Programm deshalb mit normierten Abständen, nicht genau wie getippt.
-- Wer schneller tippt, als der Interpreter verarbeitet, kann Zeichen verlieren,
-  etwa beim Einfügen eines ganzen Programms per Zwischenablage. Für längere
-  Programme ist LOAD vom Band der vorgesehene Weg.
+- Integers only, from −131071 to +131071; no floating point.
+- Variables are single letters; there are no arrays and no string variables.
+- One statement per line.
+- At most one comparison per expression; no logical operators AND/OR.
+- Input lines are limited to 126 characters.
+- Keywords are recognised even without spaces around them. `GO TO` with a space
+  is therefore not allowed, and a sequence of letters that spells a keyword
+  becomes that keyword.
+- Spaces outside of strings are not stored. LIST therefore shows the program
+  with normalised spacing, not exactly as typed.
+- Typing faster than the interpreter can process may lose characters, for
+  example when pasting a whole program. For longer programs, LOAD from tape is
+  the intended route.
 
 ---
 
-## 10. Ausblick
+## 10. Outlook
 
-Mögliche nächste Schritte, für die in Bank 0 noch 2146 Wörter frei sind:
+Possible next steps; 1960 words are still free in bank 0:
 
-- `LINE x1, y1, x2, y2` zum Zeichnen von Strecken
-- `MERGE`, um ein Programm vom Band zum vorhandenen hinzuzufügen
-- Trigonometrie mit der Sinus-Routine aus Spacewar!, skaliert auf ganze Zahlen
+- `LINE x1, y1, x2, y2` for drawing line segments
+- `MERGE` to add a program from tape to the one in memory
+- Trigonometry using the sine routine from Spacewar!, scaled to integers
